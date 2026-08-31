@@ -46,6 +46,12 @@ def send_message(chat_id, text, reply_markup=None, photo=None):
         print(f"Ошибка отправки: {e}")
         return None
 
+def safe_answer_callback(call, text=None, show_alert=False):
+    try:
+        bot.answer_callback_query(call.id, text, show_alert)
+    except:
+        pass
+
 def init_db():
     conn = sqlite3.connect('real_estate.db')
     cursor = conn.cursor()
@@ -153,7 +159,7 @@ def back_to_main(call):
         "Главное меню\nВыберите действие:",
         reply_markup=get_main_keyboard()
     )
-    bot.answer_callback_query(call.id)
+    safe_answer_callback(call)
 
 @bot.callback_query_handler(func=lambda call: call.data == "catalog")
 def show_catalog(call):
@@ -163,7 +169,7 @@ def show_catalog(call):
         "Выберите тип недвижимости:",
         reply_markup=get_catalog_keyboard()
     )
-    bot.answer_callback_query(call.id)
+    safe_answer_callback(call)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("cat_"))
 def show_properties_by_type(call):
@@ -214,7 +220,7 @@ def show_properties_by_type(call):
             f"В категории \"{type_names.get(property_type, property_type)}\" пока нет объектов",
             reply_markup=keyboard
         )
-        bot.answer_callback_query(call.id)
+        safe_answer_callback(call)
         return
     
     delete_all_bot_messages(call.message.chat.id)
@@ -271,6 +277,7 @@ def show_properties_by_type(call):
         pagination_keyboard.add(*pagination_buttons)
     
     pagination_keyboard.add(types.InlineKeyboardButton("К каталогу", callback_data="catalog"))
+    pagination_keyboard.add(types.InlineKeyboardButton("В главное меню", callback_data="main_menu"))
     
     send_message(
         call.message.chat.id,
@@ -278,7 +285,7 @@ def show_properties_by_type(call):
         reply_markup=pagination_keyboard
     )
     
-    bot.answer_callback_query(call.id)
+    safe_answer_callback(call)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("view_"))
 def view_property(call):
@@ -291,7 +298,7 @@ def view_property(call):
     conn.close()
     
     if not prop:
-        bot.answer_callback_query(call.id, "Объект не найден", show_alert=True)
+        safe_answer_callback(call, "Объект не найден", True)
         return
     
     prop_id, prop_type, title, description, price_per_sqm, location, area, rooms, floor, total_floors, photos, created_at, is_active = prop
@@ -320,7 +327,8 @@ def view_property(call):
     keyboard = types.InlineKeyboardMarkup(row_width=1)
     keyboard.add(
         types.InlineKeyboardButton("Оставить заявку", callback_data="survey_start"),
-        types.InlineKeyboardButton("Назад", callback_data="catalog")
+        types.InlineKeyboardButton("Назад к каталогу", callback_data="catalog"),
+        types.InlineKeyboardButton("В главное меню", callback_data="main_menu")
     )
     
     delete_all_bot_messages(call.message.chat.id)
@@ -349,7 +357,7 @@ def view_property(call):
     else:
         send_message(call.message.chat.id, text, reply_markup=keyboard)
     
-    bot.answer_callback_query(call.id)
+    safe_answer_callback(call)
 
 @bot.callback_query_handler(func=lambda call: call.data == "survey_start")
 def survey_start(call):
@@ -361,7 +369,8 @@ def survey_start(call):
         types.InlineKeyboardButton("Вторичное жильё", callback_data="service_secondary"),
         types.InlineKeyboardButton("Дома", callback_data="service_house"),
         types.InlineKeyboardButton("Земельные участки", callback_data="service_land"),
-        types.InlineKeyboardButton("Коммерческая недвижимость", callback_data="service_commercial")
+        types.InlineKeyboardButton("Коммерческая недвижимость", callback_data="service_commercial"),
+        types.InlineKeyboardButton("В главное меню", callback_data="main_menu")
     )
     
     send_message(
@@ -371,7 +380,7 @@ def survey_start(call):
         reply_markup=keyboard
     )
     user_states[call.message.chat.id] = "waiting_for_service"
-    bot.answer_callback_query(call.id)
+    safe_answer_callback(call)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("service_"))
 def process_service(call):
@@ -396,7 +405,7 @@ def process_service(call):
         "<b>1. Ваше ФИО:</b>"
     )
     user_states[call.message.chat.id] = "waiting_for_name"
-    bot.answer_callback_query(call.id)
+    safe_answer_callback(call)
 
 @bot.message_handler(func=lambda message: user_states.get(message.chat.id) == "waiting_for_name")
 def process_name(message):
@@ -446,7 +455,8 @@ def process_contact_method(call):
         types.InlineKeyboardButton("В течение дня", callback_data="time_day"),
         types.InlineKeyboardButton("Вечером", callback_data="time_evening"),
         types.InlineKeyboardButton("Завтра", callback_data="time_tomorrow"),
-        types.InlineKeyboardButton("Укажу своё время", callback_data="time_custom")
+        types.InlineKeyboardButton("Укажу своё время", callback_data="time_custom"),
+        types.InlineKeyboardButton("В главное меню", callback_data="main_menu")
     )
     
     send_message(
@@ -455,7 +465,7 @@ def process_contact_method(call):
         reply_markup=keyboard
     )
     user_states[call.message.chat.id] = "waiting_for_contact_time"
-    bot.answer_callback_query(call.id)
+    safe_answer_callback(call)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("time_"))
 def process_contact_time(call):
@@ -471,14 +481,17 @@ def process_contact_time(call):
     if call.data == "time_custom":
         send_message(call.message.chat.id, "Пожалуйста, укажите удобное для вас время:")
         user_states[call.message.chat.id] = "waiting_for_custom_time"
-        bot.answer_callback_query(call.id)
+        safe_answer_callback(call)
         return
     
     contact_time = time_map.get(call.data)
     user_data[call.message.chat.id]['contact_time'] = contact_time
     
-    keyboard = types.InlineKeyboardMarkup()
-    keyboard.add(types.InlineKeyboardButton("Пропустить", callback_data="skip_budget"))
+    keyboard = types.InlineKeyboardMarkup(row_width=1)
+    keyboard.add(
+        types.InlineKeyboardButton("Пропустить", callback_data="skip_budget"),
+        types.InlineKeyboardButton("В главное меню", callback_data="main_menu")
+    )
     
     send_message(
         call.message.chat.id,
@@ -487,14 +500,17 @@ def process_contact_time(call):
         reply_markup=keyboard
     )
     user_states[call.message.chat.id] = "waiting_for_budget"
-    bot.answer_callback_query(call.id)
+    safe_answer_callback(call)
 
 @bot.message_handler(func=lambda message: user_states.get(message.chat.id) == "waiting_for_custom_time")
 def process_custom_time(message):
     user_data[message.chat.id]['contact_time'] = message.text
     
-    keyboard = types.InlineKeyboardMarkup()
-    keyboard.add(types.InlineKeyboardButton("Пропустить", callback_data="skip_budget"))
+    keyboard = types.InlineKeyboardMarkup(row_width=1)
+    keyboard.add(
+        types.InlineKeyboardButton("Пропустить", callback_data="skip_budget"),
+        types.InlineKeyboardButton("В главное меню", callback_data="main_menu")
+    )
     
     bot.send_message(
         message.chat.id,
@@ -511,22 +527,30 @@ def skip_budget(call):
     
     delete_all_bot_messages(call.message.chat.id)
     
+    keyboard = types.InlineKeyboardMarkup(row_width=1)
+    keyboard.add(types.InlineKeyboardButton("В главное меню", callback_data="main_menu"))
+    
     send_message(
         call.message.chat.id,
         "<b>6. Что бы вы хотели приобрести?</b>\n"
-        "Опишите ваши пожелания (район, площадь, количество комнат и т.д.)"
+        "Опишите ваши пожелания (район, площадь, количество комнат и т.д.)",
+        reply_markup=keyboard
     )
     user_states[call.message.chat.id] = "waiting_for_property_type"
-    bot.answer_callback_query(call.id)
+    safe_answer_callback(call)
 
 @bot.message_handler(func=lambda message: user_states.get(message.chat.id) == "waiting_for_budget")
 def process_budget(message):
     user_data[message.chat.id]['budget'] = message.text
     
+    keyboard = types.InlineKeyboardMarkup(row_width=1)
+    keyboard.add(types.InlineKeyboardButton("В главное меню", callback_data="main_menu"))
+    
     bot.send_message(
         message.chat.id,
         "<b>6. Что бы вы хотели приобрести?</b>\n"
         "Опишите ваши пожелания (район, площадь, количество комнат и т.д.)",
+        reply_markup=keyboard,
         parse_mode="HTML"
     )
     user_states[message.chat.id] = "waiting_for_property_type"
@@ -575,7 +599,7 @@ def process_property_type(message):
             
     delete_all_bot_messages(message.chat.id)
     
-    keyboard = types.InlineKeyboardMarkup()
+    keyboard = types.InlineKeyboardMarkup(row_width=1)
     keyboard.add(types.InlineKeyboardButton("В главное меню", callback_data="main_menu"))
     
     send_message(
@@ -604,7 +628,7 @@ def contact_manager(call):
     )
     
     send_message(call.message.chat.id, text, reply_markup=keyboard)
-    bot.answer_callback_query(call.id)
+    safe_answer_callback(call)
 
 @bot.callback_query_handler(func=lambda call: call.data == "about")
 def about_us(call):
@@ -619,16 +643,16 @@ def about_us(call):
     text += "Помощь с ипотекой\n\n"
     text += "Доверьте нам поиск вашей идеальной недвижимости!"
     
-    keyboard = types.InlineKeyboardMarkup()
+    keyboard = types.InlineKeyboardMarkup(row_width=1)
     keyboard.add(types.InlineKeyboardButton("В главное меню", callback_data="main_menu"))
     
     send_message(call.message.chat.id, text, reply_markup=keyboard)
-    bot.answer_callback_query(call.id)
+    safe_answer_callback(call)
 
 @bot.callback_query_handler(func=lambda call: call.data == "admin_add")
 def add_property_start(call):
     if call.from_user.id not in ADMIN_IDS:
-        bot.answer_callback_query(call.id, "Недостаточно прав", show_alert=True)
+        safe_answer_callback(call, "Недостаточно прав", True)
         return
     
     delete_all_bot_messages(call.message.chat.id)
@@ -645,7 +669,7 @@ def add_property_start(call):
     
     send_message(call.message.chat.id, "Выберите тип объекта:", reply_markup=keyboard)
     user_states[call.message.chat.id] = "admin_waiting_for_type"
-    bot.answer_callback_query(call.id)
+    safe_answer_callback(call)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("add_"))
 def process_add_type(call):
@@ -666,7 +690,7 @@ def process_add_type(call):
     
     send_message(call.message.chat.id, "Введите название объекта:")
     user_states[call.message.chat.id] = "admin_waiting_for_title"
-    bot.answer_callback_query(call.id)
+    safe_answer_callback(call)
 
 @bot.message_handler(func=lambda message: user_states.get(message.chat.id) == "admin_waiting_for_title")
 def process_title(message):
@@ -799,12 +823,12 @@ def finish_photos(call):
     )
     user_states.pop(call.message.chat.id, None)
     user_data.pop(call.message.chat.id, None)
-    bot.answer_callback_query(call.id)
+    safe_answer_callback(call)
 
 @bot.callback_query_handler(func=lambda call: call.data == "admin_menu")
 def admin_menu(call):
     if call.from_user.id not in ADMIN_IDS:
-        bot.answer_callback_query(call.id, "Недостаточно прав", show_alert=True)
+        safe_answer_callback(call, "Недостаточно прав", True)
         return
     
     delete_all_bot_messages(call.message.chat.id)
@@ -814,12 +838,12 @@ def admin_menu(call):
         "Админ-панель\nВыберите действие:",
         reply_markup=get_admin_keyboard()
     )
-    bot.answer_callback_query(call.id)
+    safe_answer_callback(call)
 
 @bot.callback_query_handler(func=lambda call: call.data == "admin_list")
 def list_properties(call):
     if call.from_user.id not in ADMIN_IDS:
-        bot.answer_callback_query(call.id, "Недостаточно прав", show_alert=True)
+        safe_answer_callback(call, "Недостаточно прав", True)
         return
     
     delete_all_bot_messages(call.message.chat.id)
@@ -834,7 +858,7 @@ def list_properties(call):
         keyboard = types.InlineKeyboardMarkup()
         keyboard.add(types.InlineKeyboardButton("В админ-панель", callback_data="admin_menu"))
         send_message(call.message.chat.id, "Список объектов пуст", reply_markup=keyboard)
-        bot.answer_callback_query(call.id)
+        safe_answer_callback(call)
         return
     
     text = "<b>Список объектов:</b>\n\n"
@@ -847,12 +871,12 @@ def list_properties(call):
     keyboard.add(types.InlineKeyboardButton("В админ-панель", callback_data="admin_menu"))
     
     send_message(call.message.chat.id, text[:4000], reply_markup=keyboard)
-    bot.answer_callback_query(call.id)
+    safe_answer_callback(call)
 
 @bot.callback_query_handler(func=lambda call: call.data == "admin_requests")
 def show_requests(call):
     if call.from_user.id not in ADMIN_IDS:
-        bot.answer_callback_query(call.id, "Недостаточно прав", show_alert=True)
+        safe_answer_callback(call, "Недостаточно прав", True)
         return
     
     delete_all_bot_messages(call.message.chat.id)
@@ -870,7 +894,7 @@ def show_requests(call):
         keyboard = types.InlineKeyboardMarkup()
         keyboard.add(types.InlineKeyboardButton("В админ-панель", callback_data="admin_menu"))
         send_message(call.message.chat.id, "Заявок пока нет", reply_markup=keyboard)
-        bot.answer_callback_query(call.id)
+        safe_answer_callback(call)
         return
     
     text = "<b>Последние заявки:</b>\n\n"
@@ -889,12 +913,12 @@ def show_requests(call):
     keyboard.add(types.InlineKeyboardButton("В админ-панель", callback_data="admin_menu"))
     
     send_message(call.message.chat.id, text[:4000], reply_markup=keyboard)
-    bot.answer_callback_query(call.id)
+    safe_answer_callback(call)
 
 @bot.callback_query_handler(func=lambda call: call.data == "admin_delete")
 def delete_property_start(call):
     if call.from_user.id not in ADMIN_IDS:
-        bot.answer_callback_query(call.id, "Недостаточно прав", show_alert=True)
+        safe_answer_callback(call, "Недостаточно прав", True)
         return
     
     delete_all_bot_messages(call.message.chat.id)
@@ -909,7 +933,7 @@ def delete_property_start(call):
         keyboard = types.InlineKeyboardMarkup()
         keyboard.add(types.InlineKeyboardButton("В админ-панель", callback_data="admin_menu"))
         send_message(call.message.chat.id, "Нет активных объектов для удаления", reply_markup=keyboard)
-        bot.answer_callback_query(call.id)
+        safe_answer_callback(call)
         return
     
     keyboard = types.InlineKeyboardMarkup(row_width=1)
@@ -923,7 +947,7 @@ def delete_property_start(call):
     keyboard.add(types.InlineKeyboardButton("В админ-панель", callback_data="admin_menu"))
     
     send_message(call.message.chat.id, "Выберите объект для удаления:", reply_markup=keyboard)
-    bot.answer_callback_query(call.id)
+    safe_answer_callback(call)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("delete_"))
 def delete_property(call):
@@ -935,7 +959,7 @@ def delete_property(call):
     conn.commit()
     conn.close()
     
-    bot.answer_callback_query(call.id, f"Объект ID {property_id} деактивирован", show_alert=True)
+    safe_answer_callback(call, f"Объект ID {property_id} деактивирован", True)
     admin_menu(call)
 
 if __name__ == "__main__":
